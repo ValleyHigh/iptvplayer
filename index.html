@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <title>IPTV Player mit Kategorie- & Channel-Suche</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <!-- HLS.js für .m3u8-Playback -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box }
+    body,html { height:100%; background:#222; color:#eee; font-family:sans-serif }
+    #app { display:flex; height:100%; flex-direction: column }
+
+    /* Sidebar */
+    #sidebar {
+      width:100%;
+      background:#111;
+      display:flex;
+      border-bottom:2px solid #444;
+      flex:0 0 auto;
+      max-height: 40vh;
+    }
+    .column {
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      padding:10px;
+      overflow:hidden;
+    }
+    .column + .column {
+      border-left:2px solid #444;
+    }
+    .column h2 {
+      padding:8px;
+      background:#333;
+      font-size:1rem;
+      margin:-10px -10px 10px -10px;
+    }
+    .column input {
+      margin-bottom:10px;
+      padding:8px;
+      font-size:0.9rem;
+      border:none;
+      border-radius:4px;
+      width:100%;
+    }
+    ul {
+      list-style:none;
+      flex:1;
+      overflow-y:auto;
+      background:#111;
+      -webkit-overflow-scrolling: touch;
+    }
+    ul li {
+      padding:10px 12px;
+      cursor:pointer;
+      border-bottom:1px solid #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 0.9rem;
+    }
+    ul li.active { background:#444 }
+    ul li:hover  { background:#333 }
+    ul li:active { background:#555 }
+
+    /* Player */
+    #player {
+      flex:1;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:black;
+      min-height: 0;
+    }
+    video {
+      width:100%;
+      height:100%;
+      max-height:60vh;
+      background:black;
+    }
+
+    /* Desktop/Tablet Ansicht */
+    @media (min-width: 768px) {
+      #app {
+        flex-direction: row;
+      }
+      
+      #sidebar {
+        width:600px;
+        max-height: 100vh;
+        border-right:2px solid #444;
+        border-bottom: none;
+        flex:0 0 600px;
+      }
+      
+      .column h2 {
+        font-size:1.1rem;
+      }
+      
+      ul li {
+        padding:8px 12px;
+        font-size: 1rem;
+      }
+      
+      video {
+        max-height:100vh;
+      }
+    }
+
+    /* Größere Desktops */
+    @media (min-width: 1200px) {
+      #sidebar {
+        width:700px;
+        flex:0 0 700px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <!-- Kategorien-Spalte -->
+      <div class="column" id="category-container">
+        <h2>Kategorien</h2>
+        <input id="category-search" type="text" placeholder="Suche Kategorien…" disabled/>
+        <ul id="category-list">
+          <li>Loading…</li>
+        </ul>
+      </div>
+      <!-- Channels-Spalte -->
+      <div class="column" id="channel-container">
+        <h2>Channels</h2>
+        <input id="channel-search" type="text" placeholder="Suche Channels…" disabled/>
+        <ul id="channels">
+          <li>Wähle eine Kategorie</li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Videoplayer -->
+    <div id="player">
+      <video id="video" controls playsinline></video>
+    </div>
+  </div>
+
+  <script>
+  (()=>{
+    // ─── Konfiguration ───────────────────────────────────
+    const CONFIG = {
+      baseUrl:  'http://eds48797.cdngold.me',
+      username: '170f4d13d1f8',
+      password: '4adc9c0ea5'
+    };
+    function apiUrl(action, params = {}) {
+      const u = new URL(CONFIG.baseUrl + '/player_api.php');
+      u.searchParams.set('username', CONFIG.username);
+      u.searchParams.set('password', CONFIG.password);
+      u.searchParams.set('action', action);
+      Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,v));
+      return u.toString();
+    }
+
+    // ─── DOM & State ─────────────────────────────────────
+    const catSearchEl   = document.getElementById('category-search');
+    const categoryEl    = document.getElementById('category-list');
+    const chanSearchEl  = document.getElementById('channel-search');
+    const channelsEl    = document.getElementById('channels');
+    const videoEl       = document.getElementById('video');
+
+    let categories       = [];
+    let filteredCats     = [];
+    let channelsCache    = {};
+    let currentCatId     = null;
+    let hlsInstance      = null;
+
+    // ─── Initial Load Kategorien ─────────────────────────
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        catSearchEl.disabled = true;
+        categoryEl.innerHTML = '<li>Loading…</li>';
+        categories = await fetch(apiUrl('get_live_categories'))
+                      .then(r=>r.json());
+        filteredCats = categories.slice();
+        renderCategories();
+        catSearchEl.disabled = false;
+      } catch(err) {
+        console.error('Fehler beim Laden der Kategorien', err);
+        categoryEl.innerHTML = '<li>Fehler beim Laden</li>';
+      }
+    });
+
+    // ─── Render Kategorien ────────────────────────────────
+    function renderCategories() {
+      categoryEl.innerHTML = '';
+      if (!filteredCats.length) {
+        categoryEl.innerHTML = '<li>Keine Kategorien</li>';
+        return;
+      }
+      filteredCats.forEach(cat => {
+        const li = document.createElement('li');
+        li.textContent      = cat.category_name;
+        li.dataset.catId    = cat.category_id;
+        categoryEl.appendChild(li);
+      });
+    }
+
+    // ─── Kategorie-Suche ─────────────────────────────────
+    catSearchEl.addEventListener('input', () => {
+      const q = catSearchEl.value.trim().toLowerCase();
+      filteredCats = q
+        ? categories.filter(c => c.category_name.toLowerCase().includes(q))
+        : categories.slice();
+      categoryEl.querySelectorAll('li').forEach(x=>x.classList.remove('active'));
+      currentCatId = null;
+      chanSearchEl.value = '';
+      chanSearchEl.disabled = true;
+      channelsEl.innerHTML = '<li>Wähle eine Kategorie</li>';
+      renderCategories();
+    });
+
+    // ─── Klick auf Kategorie ─────────────────────────────
+    categoryEl.addEventListener('click', e => {
+      const li = e.target.closest('li');
+      if (!li) return;
+      const catId = li.dataset.catId;
+      if (catId === currentCatId) return;
+      categoryEl.querySelectorAll('li').forEach(x=>x.classList.remove('active'));
+      li.classList.add('active');
+      loadChannels(catId);
+    });
+
+    // ─── Channels laden & cache'n ───────────────────────
+    async function loadChannels(catId) {
+      currentCatId = catId;
+      chanSearchEl.value = '';
+      chanSearchEl.disabled = true;
+      channelsEl.innerHTML = '<li>Loading…</li>';
+
+      if (channelsCache[catId]) {
+        renderChannels(channelsCache[catId]);
+        return;
+      }
+
+      try {
+        const data = await fetch(apiUrl('get_live_streams',{category_id:catId}))
+                          .then(r=>r.json());
+        const list = data.map(ch => {
+          let url = ch.stream_url;
+          if (!url && ch.stream_id) {
+            url = `${CONFIG.baseUrl}/live/${CONFIG.username}/${CONFIG.password}/${ch.stream_id}.m3u8`;
+          }
+          return { name: ch.name, url };
+        });
+        channelsCache[catId] = list;
+        renderChannels(list);
+      } catch(err) {
+        console.error('Fehler beim Laden der Channels', err);
+        channelsEl.innerHTML = '<li>Fehler beim Laden</li>';
+      }
+    }
+
+    // ─── Render Channels & Suche aktivieren ─────────────
+    function renderChannels(list) {
+      channelsEl.innerHTML = '';
+      if (!list.length) {
+        channelsEl.innerHTML = '<li>Keine Channels</li>';
+      } else {
+        list.forEach(ch => {
+          const li = document.createElement('li');
+          li.textContent = ch.name;
+          li.dataset.url = ch.url;
+          channelsEl.appendChild(li);
+        });
+        chanSearchEl.disabled = false;
+      }
+    }
+
+    // ─── Channel-Suche ───────────────────────────────────
+    chanSearchEl.addEventListener('input', () => {
+      const q   = chanSearchEl.value.trim().toLowerCase();
+      const all = channelsCache[currentCatId] || [];
+      const filtered = q
+        ? all.filter(ch => ch.name.toLowerCase().includes(q))
+        : all;
+      renderChannels(filtered);
+    });
+
+    // ─── Klick auf Channel → Playback ────────────────────
+    channelsEl.addEventListener('click', e => {
+      const li = e.target.closest('li');
+      if (!li || !li.dataset.url) return;
+      channelsEl.querySelectorAll('li').forEach(x=>x.classList.remove('active'));
+      li.classList.add('active');
+      playStream(li.dataset.url);
+    });
+
+    // ─── Play-Funktion mit HLS.js + Native-Fallback ─────
+    function playStream(src) {
+      if (!src) return alert('⚠️ Ungültige URL');
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+        videoEl.src = '';
+      }
+      if (window.Hls && Hls.isSupported()) {
+        hlsInstance = new Hls();
+        hlsInstance.loadSource(src);
+        hlsInstance.attachMedia(videoEl);
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => videoEl.play().catch(console.error));
+        hlsInstance.on(Hls.Events.ERROR, (_e,data) =>
+          console.error('HLS.js error', data)
+        );
+      }
+      else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+        videoEl.src = src;
+        videoEl.addEventListener('loadedmetadata', () => {
+          videoEl.play().catch(console.error);
+        }, { once:true });
+      }
+      else {
+        alert('⚠️ HLS wird nicht unterstützt.');
+      }
+    }
+  })();
+  </script>
+</body>
+</html>
