@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <title>IPTV Cinema Player</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <!-- HLS.js -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- Google Fonts & Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    :root {
+      --bg-color: #0b0c10;
+      --sidebar-bg: #111217;
+      --sidebar-border: #1f2833;
+      --accent-color: #45a29e; /* Sanftes Teal/Grün */
+      --accent-hover: #66fcf1;
+      --text-main: #c5c6c7;
+      --text-muted: #8892b0;
+      --input-bg: #1f2833;
+      --item-hover: #1f2833;
+      --danger: #e63946;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; outline: none; }
+    
+    body, html { 
+      height: 100%; 
+      background: var(--bg-color); 
+      color: var(--text-main); 
+      font-family: 'Inter', sans-serif; 
+      overflow: hidden; /* Scrollbar nur in Containern */
+    }
+
+    /* Scrollbar Styling (Chrome/Edge/Safari) */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent-color); }
+
+    #app { 
+      display: flex; 
+      height: 100%; 
+      width: 100%;
+      background: radial-gradient(circle at center, #1b1e26 0%, #000000 100%);
+    }
+
+    /* ─── SIDEBAR ─── */
+    #sidebar {
+      width: 650px;
+      background: rgba(17, 18, 23, 0.95);
+      backdrop-filter: blur(10px);
+      display: flex;
+      border-right: 1px solid var(--sidebar-border);
+      transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.3s ease, transform 0.3s ease;
+      z-index: 10;
+      box-shadow: 5px 0 15px rgba(0,0,0,0.5);
+    }
+
+    .column { 
+      flex: 1; 
+      display: flex; 
+      flex-direction: column; 
+      padding: 15px; 
+      overflow: hidden;
+      min-width: 0; /* Verhindert Flex-Overflow */
+    }
+    
+    .column + .column { 
+      border-left: 1px solid var(--sidebar-border); 
+    }
+
+    h2 { 
+      font-size: 0.85rem; 
+      text-transform: uppercase; 
+      letter-spacing: 1.5px; 
+      color: var(--text-muted); 
+      margin-bottom: 15px; 
+      display: flex; 
+      align-items: center; 
+      gap: 8px; 
+    }
+
+    /* Inputs & Controls */
+    .control-row { 
+      display: flex; 
+      gap: 10px; 
+      align-items: center; 
+      margin-bottom: 15px; 
+      flex-wrap: wrap; 
+    }
+
+    input[type="text"], input[type="number"], input[type="password"], input[type="url"], select { 
+      background: var(--input-bg);
+      border: 1px solid transparent;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      width: 100%;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+
+    input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus, input[type="url"]:focus, select:focus {
+      border-color: var(--accent-color);
+      background: #28313d;
+    }
+
+    input[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+    /* Buttons */
+    button { 
+      padding: 8px 15px; 
+      border: none; 
+      border-radius: 6px; 
+      background: var(--accent-color); 
+      color: #000; 
+      font-weight: 600; 
+      cursor: pointer; 
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px; 
+    }
+    button:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+    button[disabled] { background: #333; color: #666; cursor: not-allowed; transform: none; }
+    
+    /* Secondary Button Style */
+    button.btn-secondary {
+        background: #333;
+        color: var(--text-main);
+    }
+    button.btn-secondary:hover {
+        background: #444;
+    }
+    button.btn-danger {
+        background: var(--danger);
+        color: white;
+    }
+    button.btn-danger:hover {
+        background: #ff4d5a;
+    }
+
+    /* Listen */
+    ul { 
+      list-style: none; 
+      flex: 1; 
+      overflow-y: auto; 
+      margin-top: 5px;
+      padding-right: 5px; /* Platz für Scrollbar */
+    }
+
+    ul li { 
+      padding: 10px 12px; 
+      cursor: pointer; 
+      border-radius: 6px;
+      margin-bottom: 4px; 
+      font-size: 0.9rem; 
+      color: var(--text-main);
+      transition: all 0.2s; 
+      white-space: nowrap; 
+      overflow: hidden; 
+      text-overflow: ellipsis; 
+      display: flex; 
+      align-items: center; 
+      gap: 8px; 
+    }
+    
+    /* Kleines Icon vor Listeneinträgen */
+    ul li::before {
+      content: '\f0da'; /* FontAwesome Play Icon Triangle */
+      font-family: 'Font Awesome 6 Free'; 
+      font-weight: 900; 
+      font-size: 0.7rem; 
+      color: var(--text-muted); 
+      opacity: 0.5; 
+      transition: all 0.2s; 
+    }
+
+    ul li:hover { 
+      background: var(--item-hover); 
+      color: white; 
+      padding-left: 16px;
+    }
+    
+    ul li:hover::before { color: var(--accent-color); opacity: 1; }
+
+    ul li.active { 
+      background: linear-gradient(90deg, rgba(69, 162, 158, 0.15) 0%, transparent 100%); 
+      color: var(--accent-hover); 
+      border-left: 3px solid var(--accent-color); 
+    }
+    ul li.active::before { color: var(--accent-hover); opacity: 1; }
+
+    /* ─── SWITCHES (Custom Checkboxes) ─── */
+    .switch-group {
+      background: #161920; 
+      padding: 10px; 
+      border-radius: 8px; 
+      margin-bottom: 15px; 
+      display: flex; 
+      flex-direction: column; 
+      gap: 8px; 
+    }
+
+    .switch { 
+      display: inline-flex; 
+      align-items: center; 
+      justify-content: space-between; 
+      gap: 8px; 
+      font-size: 0.85rem; 
+      cursor: pointer; 
+      color: var(--text-muted); 
+      width: 100%; 
+    }
+    
+    .switch input { display: none; }
+    
+    .slider { 
+      position: relative; 
+      width: 34px; 
+      height: 18px; 
+      background-color: #333; 
+      border-radius: 20px; 
+      transition: .3s; 
+    }
+    .slider:before { 
+      content: ""; 
+      position: absolute; 
+      height: 14px; 
+      width: 14px; 
+      left: 2px; 
+      bottom: 2px; 
+      background-color: white; 
+      border-radius: 50%; 
+      transition: .3s; 
+    }
+    input:checked + .slider { background-color: var(--accent-color); }
+    input:checked + .slider:before { transform: translateX(16px); }
+
+    .dimmed { opacity: 0.3; pointer-events: none; filter: grayscale(1); transition: opacity 0.3s; }
+
+    /* ─── PLAYER AREA ─── */
+    #player { 
+      flex: 1; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      position: relative; 
+      background: black; 
+      box-shadow: inset 0 0 50px rgba(0,0,0,0.8); 
+    }
+
+    video { 
+      width: 100%; 
+      height: 100%; 
+      max-height: 100vh; 
+      background: black; 
+      outline: none; 
+    }
+
+    /* HUD Elemente */
+    #lag-indicator {
+      position: absolute; 
+      left: 20px; 
+      bottom: 80px; /* Über den Standard Controls */
+      background: rgba(11, 12, 16, 0.85); 
+      backdrop-filter: blur(5px);
+      padding: 10px 15px; 
+      border-radius: 8px;
+      font-size: 0.85rem; 
+      color: var(--accent-color);
+      border-left: 3px solid var(--accent-color);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      animation: fadeIn 0.3s ease;
+      z-index: 20;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Theater Exit Button */
+    #exit-theater-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: all 0.3s ease;
+      backdrop-filter: blur(4px);
+      cursor: pointer;
+    }
+    
+    #exit-theater-btn:hover { background: var(--accent-color); color: #000; border-color: transparent; }
+    
+    #player:hover #exit-theater-btn, 
+    body:not(.theater-mode) #exit-theater-btn:focus { 
+      opacity: 1; 
+      transform: translateY(0); 
+    }
+
+    body:not(.theater-mode) #exit-theater-btn { display: none; }
+
+    /* THEATER MODE ZUSTAND */
+    body.theater-mode #sidebar {
+      width: 0;
+      opacity: 0;
+      transform: translateX(-20px);
+      border: none;
+      padding: 0;
+    }
+    
+    body.theater-mode #app {
+      background: black;
+    }
+
+    /* ─── LOGIN MODAL ─── */
+    .modal-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8);
+        backdrop-filter: blur(5px);
+        display: flex; justify-content: center; align-items: center;
+        z-index: 1000;
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.3s ease;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+    .modal-content {
+        background: #161920;
+        width: 400px;
+        padding: 30px;
+        border-radius: 12px;
+        border: 1px solid var(--sidebar-border);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.7);
+        display: flex; flex-direction: column; gap: 15px;
+    }
+    .modal-header { font-size: 1.2rem; font-weight: 600; color: white; margin-bottom: 5px; }
+    .form-group label { display: block; color: var(--text-muted); font-size: 0.8rem; margin-bottom: 5px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 10px; justify-content: flex-end; }
+    .server-test-results {
+      background: #10141b;
+      border: 1px solid #2b3544;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 0.82rem;
+      color: #d8e2f1;
+      line-height: 1.5;
+      min-height: 48px;
+    }
+
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <!-- Kategorien -->
+      <div class="column" id="category-container">
+        <h2><i class="fas fa-layer-group"></i> Kategorien</h2>
+        <div class="control-row">
+          <input id="category-search" type="text" placeholder="Filtern..." disabled/>
+        </div>
+        <ul id="category-list">
+            <li style="text-align:center; opacity:0.5; padding-top:20px;">
+                <i class="fas fa-spinner fa-spin"></i> Lade...
+            </li>
+        </ul>
+      </div>
+
+      <!-- Channels -->
+      <div class="column" id="channel-container">
+        <h2><i class="fas fa-tv"></i> Kanäle</h2>
+
+        <!-- Settings Panel -->
+        <div class="switch-group" id="settings-panel">
+            
+            <!-- LOGIN BUTTON -->
+            <button id="open-login-btn" class="btn-secondary" style="width:100%; justify-content:center; margin-bottom:6px;">
+                <i class="fas fa-user-cog"></i> Server wechseln
+            </button>
+            <div id="active-server-indicator" style="font-size:0.8rem; color:var(--text-muted); margin:0 0 3px 0;"></div>
+            <div id="active-viewer-indicator" style="font-size:0.78rem; color:var(--text-muted); margin:0 0 3px 0;">Viewer: -</div>
+            <div id="best-server-indicator" style="font-size:0.78rem; color:var(--text-muted); margin:0 0 8px 0;"></div>
+            <div style="height:1px; background:#333; margin: 5px 0 8px 0;"></div>
+            
+            <label class="switch" title="Startet mit Verzögerung, um Ruckler zu vermeiden">
+              <span><i class="fas fa-tachometer-alt"></i> Anti-Lag</span>
+              <input id="antilag-toggle" type="checkbox">
+              <span class="slider"></span>
+            </label>
+            
+            <!-- Wenn Anti-Lag an ist, zeigen wir das Input Feld hübscher an -->
+            <div id="antilag-input-container" class="control-row" style="margin-bottom:0; margin-top:5px; font-size:0.8rem;">
+                <span style="color:var(--text-muted);">Puffer (sek):</span>
+                <input id="antilag-delay" class="number-input" type="number" min="30" max="600" step="15" value="120" style="width:70px; padding:4px;">
+            </div>
+
+            <div style="height:1px; background:#333; margin: 8px 0;"></div>
+
+            <label class="switch" title="Globale Channelsuche">
+                <span><i class="fas fa-globe"></i> Nur Suche (Global)</span>
+                <input id="mode-nur-channels" type="checkbox">
+                <span class="slider"></span>
+            </label>
+
+            <label class="switch" title="Sidebar ausblenden">
+                <span><i class="fas fa-expand"></i> Theater Modus</span>
+                <input id="theater-toggle" type="checkbox">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <!-- 🆕 Globale Channelsuche -->
+        <div class="control-row" id="global-search-row" hidden>
+          <input id="global-channel-search" type="text" placeholder="Alle Kanäle durchsuchen..."/>
+          <button id="global-search-btn"><i class="fas fa-search"></i></button>
+        </div>
+
+        <!-- Kategoriegebundene Suche -->
+        <div class="control-row" id="channel-search-row">
+          <input id="channel-search" type="text" placeholder="Kanal suchen..." disabled/>
+        </div>
+
+        <ul id="channels">
+            <li style="opacity:0.5; font-style:italic; padding-left:0;">
+                &larr; Wähle eine Kategorie
+            </li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Videoplayer -->
+    <div id="player">
+      <!-- 🆕 Button um Sidebar wieder einzublenden -->
+      <button id="exit-theater-btn"><i class="fas fa-columns"></i> Menü öffnen</button>
+
+      <video id="video" controls autoplay></video>
+      <div id="lag-indicator" hidden>
+        <i class="fas fa-circle-notch fa-spin"></i> Prebuffering ...
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEWER MODAL -->
+  <div class="modal-overlay" id="viewer-modal">
+    <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header"><i class="fas fa-users"></i> Wer schaut?</div>
+        <div style="color:var(--text-muted); font-size:0.9rem;">Bitte Profil wählen:</div>
+        <div class="modal-actions" style="justify-content:center; gap:12px; margin-top:5px;">
+            <button id="viewer-makoa">Makoa</button>
+            <button id="viewer-ano" class="btn-secondary">Ano</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- LOGIN MODAL -->
+  <div class="modal-overlay" id="login-modal">
+    <div class="modal-content">
+        <div class="modal-header"><i class="fas fa-sign-in-alt"></i> Account Einstellungen</div>
+        
+        <div class="form-group">
+            <label>Server</label>
+            <select id="login-server-select"></select>
+        </div>
+        <div class="form-group">
+            <label>Aktuell verbunden</label>
+            <div id="login-current-server" style="font-size:0.9rem; color:#fff; background:var(--input-bg); border-radius:6px; padding:8px 12px;"></div>
+        </div>
+
+        <div class="modal-actions" style="justify-content:space-between;">
+            <button class="btn-secondary" id="login-test-servers"><i class="fas fa-signal"></i> Server testen</button>
+            <div style="display:flex; gap:10px;">
+              <button id="login-save">Speichern</button>
+            </div>
+        </div>
+        <div id="server-test-results" class="server-test-results">Noch kein Test durchgeführt.</div>
+        <div style="text-align:right;">
+             <button id="login-cancel" style="background:transparent; color:#666; font-size:0.8rem; margin-top:5px;">Abbrechen</button>
+        </div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    // ─── Default Konfiguration ──────────────────────────────
+    const DEFAULT_CONFIG = {
+      baseUrl:  'http://eds48797.cdngold.me',
+      username: '170f4d13d1f8',
+      password: '4adc9c0ea5'
+    };
+
+    const VIEWER_CREDENTIALS = {
+      Makoa: { username: '170f4d13d1f8', password: '4adc9c0ea5' },
+      Ano:   { username: '17f1f4d29d72', password: '24396d15e7' }
+    };
+
+    const SERVER_OPTIONS = [
+      { name: 'Server 1', url: 'http://eds48797.cdngold.me' },
+      { name: 'Server 2', url: 'http://cf.cdn-959.me/' },
+      { name: 'Server 3', url: 'http://brake59383.cdnsilver.me/' },
+      { name: 'Server 4', url: 'http://pool71382.cdnsilver.me/' },
+      { name: 'Server 5', url: 'http://cf.business-cdn-8k.ru/' }
+    ];
+
+    function normalizeServerUrl(url) {
+      return (url || '').trim().replace(/\/$/, '');
+    }
+
+    function serverLabelFor(url) {
+      const normalized = normalizeServerUrl(url);
+      const matched = SERVER_OPTIONS.find(s => normalizeServerUrl(s.url) === normalized);
+      return matched ? `${matched.name} (${normalized})` : `Eigener Server (${normalized})`;
+    }
+
+    // Prüfen ob Custom Daten im Storage liegen
+    let savedConfig = null;
+    try {
+        const saved = localStorage.getItem('iptv_config');
+        if(saved) savedConfig = JSON.parse(saved);
+    } catch(e) { console.error(e); }
+
+    // Aktive Konfiguration (Entweder Gespeichert oder Default)
+    const CONFIG = { ...DEFAULT_CONFIG, ...(savedConfig || {}) };
+    
+    function apiUrl(action, params = {}) {
+      // URL sauber formatieren (kein trailing slash)
+      let base = CONFIG.baseUrl.replace(/\/$/, "");
+      const u = new URL(base + '/player_api.php');
+      u.searchParams.set('username', CONFIG.username);
+      u.searchParams.set('password', CONFIG.password);
+      u.searchParams.set('action', action);
+      Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,v));
+      return u.toString();
+    }
+
+    // ─── DOM & State ─────────────────────────────────────
+    const catSearchEl     = document.getElementById('category-search');
+    const categoryEl      = document.getElementById('category-list');
+    const categoryCol     = document.getElementById('category-container');
+
+    const chanSearchRow = document.getElementById('channel-search-row');
+    const chanSearchEl  = document.getElementById('channel-search');
+    
+    const globalRow       = document.getElementById('global-search-row');
+    const globalInput     = document.getElementById('global-channel-search');
+    const globalBtn       = document.getElementById('global-search-btn');
+
+    const channelsEl      = document.getElementById('channels');
+    const videoEl         = document.getElementById('video');
+    const lagIndicator    = document.getElementById('lag-indicator');
+    const antiLagToggle = document.getElementById('antilag-toggle');
+    const antiLagDelay  = document.getElementById('antilag-delay');
+    const nurChannelsToggle = document.getElementById('mode-nur-channels');
+
+    // Theater Mode
+    const theaterToggle = document.getElementById('theater-toggle');
+    const exitTheaterBtn = document.getElementById('exit-theater-btn');
+
+    // Login Modal Elements
+    const openLoginBtn = document.getElementById('open-login-btn');
+    const activeServerIndicator = document.getElementById('active-server-indicator');
+    const activeViewerIndicator = document.getElementById('active-viewer-indicator');
+    const bestServerIndicator = document.getElementById('best-server-indicator');
+    const viewerModal = document.getElementById('viewer-modal');
+    const viewerMakoaBtn = document.getElementById('viewer-makoa');
+    const viewerAnoBtn = document.getElementById('viewer-ano');
+    const loginModal = document.getElementById('login-modal');
+    const loginServerSelect = document.getElementById('login-server-select');
+    const loginCurrentServer = document.getElementById('login-current-server');
+    const loginTestServersBtn = document.getElementById('login-test-servers');
+    const serverTestResultsEl = document.getElementById('server-test-results');
+    const loginSaveBtn = document.getElementById('login-save');
+    const loginCancelBtn = document.getElementById('login-cancel');
+
+    let categories        = [];
+    let filteredCats      = [];
+    let channelsCache     = {};        // per Kategorie
+    let allChannelsCache = null;       // global
+    let currentCatId      = null;
+    let hlsInstance       = null;
+    let currentStreamUrl = null;
+    let stallTimer        = null;
+    let retryCount        = 0;
+    const MAX_RETRIES     = 3;
+    let lastServerTest = null;
+    let testInProgress = false;
+    let activeViewer = '';
+    let appInitialized = false;
+
+    // ─── Viewer Auswahl ──────────────────────────────────────
+    function applyViewer(viewerName) {
+      const creds = VIEWER_CREDENTIALS[viewerName];
+      if (!creds) return;
+      CONFIG.username = creds.username;
+      CONFIG.password = creds.password;
+      activeViewer = viewerName;
+      activeViewerIndicator.textContent = `Viewer: ${viewerName}`;
+    }
+
+
+    function closeViewerModal() {
+      viewerModal.classList.remove('open');
+    }
+
+    async function initializeAppData() {
+      if (appInitialized) return;
+      appInitialized = true;
+      try {
+        catSearchEl.disabled = true;
+        categories = await fetch(apiUrl('get_live_categories')).then(r=>r.json());
+        filteredCats = categories.slice();
+        renderCategories();
+        catSearchEl.disabled = false;
+        applyNurChannelsUI();
+      } catch(err) {
+        console.error('Fehler beim Laden der Kategorien', err);
+        categoryEl.innerHTML = '<li><i class="fas fa-exclamation-triangle"></i> Fehler beim Laden (Check Login)</li>';
+      }
+    }
+
+    viewerMakoaBtn.addEventListener('click', async () => {
+      applyViewer('Makoa');
+      closeViewerModal();
+      await initializeAppData();
+    });
+
+    viewerAnoBtn.addEventListener('click', async () => {
+      applyViewer('Ano');
+      closeViewerModal();
+      await initializeAppData();
+    });
+
+    // ─── LOGIN LOGIC ─────────────────────────────────────────
+    function populateServerSelect() {
+      const currentBase = normalizeServerUrl(CONFIG.baseUrl);
+      loginServerSelect.innerHTML = '';
+
+      SERVER_OPTIONS.forEach(server => {
+        const option = document.createElement('option');
+        const normalizedUrl = normalizeServerUrl(server.url);
+        option.value = normalizedUrl;
+        option.textContent = `${server.name} - ${normalizedUrl}`;
+        if (normalizedUrl === currentBase) option.selected = true;
+        loginServerSelect.appendChild(option);
+      });
+
+      if (!SERVER_OPTIONS.some(s => normalizeServerUrl(s.url) === currentBase) && currentBase) {
+        const customOption = document.createElement('option');
+        customOption.value = currentBase;
+        customOption.textContent = `Aktueller (nicht in Liste) - ${currentBase}`;
+        customOption.selected = true;
+        loginServerSelect.appendChild(customOption);
+      }
+    }
+
+    function updateCurrentServerLabels() {
+      const label = serverLabelFor(CONFIG.baseUrl);
+      activeServerIndicator.textContent = `Aktiv: ${label}`;
+      loginCurrentServer.textContent = label;
+
+      if (lastServerTest && lastServerTest.best) {
+        bestServerIndicator.textContent = `Beste Verbindung: ${lastServerTest.best.name} (${lastServerTest.best.ms} ms)`;
+      } else {
+        bestServerIndicator.textContent = 'Beste Verbindung: noch nicht getestet';
+      }
+    }
+
+    function serverApiUrl(baseUrl) {
+      const u = new URL(normalizeServerUrl(baseUrl) + '/player_api.php');
+      u.searchParams.set('username', CONFIG.username);
+      u.searchParams.set('password', CONFIG.password);
+      u.searchParams.set('action', 'get_live_categories');
+      u.searchParams.set('_ts', String(Date.now()));
+      return u.toString();
+    }
+
+    async function testSingleServer(baseUrl, timeoutMs = 8000) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const start = performance.now();
+
+      try {
+        const response = await fetch(serverApiUrl(baseUrl), {
+          method: 'GET',
+          cache: 'no-store',
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          const ms = Math.round(performance.now() - start);
+          return { ok: false, ms, error: `HTTP ${response.status}` };
+        }
+
+        await response.json();
+        const ms = Math.round(performance.now() - start);
+        return { ok: true, ms };
+      } catch (err) {
+        const ms = Math.round(performance.now() - start);
+        const reason = err && err.name === 'AbortError' ? 'Timeout' : 'Fehler/CORS';
+        return { ok: false, ms, error: reason };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    function renderServerTestResults(summary, loading = false) {
+      if (loading) {
+        serverTestResultsEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Server werden getestet...';
+        return;
+      }
+
+      if (!summary || !summary.results || !summary.results.length) {
+        serverTestResultsEl.textContent = 'Kein Testergebnis verfügbar.';
+        return;
+      }
+
+      const lines = summary.results.map(r => {
+        if (r.ok) return `${r.name}: ${r.ms} ms`;
+        return `${r.name}: nicht erreichbar (${r.error})`;
+      });
+
+      if (summary.best) {
+        lines.unshift(`Beste Verbindung: ${summary.best.name} (${summary.best.ms} ms)`);
+      } else {
+        lines.unshift('Beste Verbindung: keine erreichbar');
+      }
+
+      serverTestResultsEl.innerHTML = lines.join('<br>');
+    }
+
+    async function runServerTest() {
+      if (testInProgress) return;
+      testInProgress = true;
+      loginTestServersBtn.disabled = true;
+      renderServerTestResults(null, true);
+
+      const results = await Promise.all(SERVER_OPTIONS.map(async (server) => {
+        const first = await testSingleServer(server.url);
+        const second = await testSingleServer(server.url);
+        const okRuns = [first, second].filter(r => r.ok);
+        if (!okRuns.length) {
+          const fallback = first.ok ? first : second;
+          return { name: server.name, url: normalizeServerUrl(server.url), ...fallback };
+        }
+        const bestMs = Math.min(...okRuns.map(r => r.ms));
+        return { name: server.name, url: normalizeServerUrl(server.url), ok: true, ms: bestMs };
+      }));
+
+      const reachable = results.filter(r => r.ok).sort((a, b) => a.ms - b.ms);
+      lastServerTest = {
+        results,
+        best: reachable.length ? reachable[0] : null
+      };
+
+      renderServerTestResults(lastServerTest, false);
+      updateCurrentServerLabels();
+
+      loginTestServersBtn.disabled = false;
+      testInProgress = false;
+    }
+
+    async function refreshDataForServerChange() {
+      channelsCache = {};
+      allChannelsCache = null;
+      currentCatId = null;
+      categories = [];
+      filteredCats = [];
+
+      catSearchEl.value = '';
+      chanSearchEl.value = '';
+      catSearchEl.disabled = true;
+      chanSearchEl.disabled = true;
+
+      categoryEl.innerHTML = '<li style="text-align:center; opacity:0.6; padding-top:16px;"><i class="fas fa-spinner fa-spin"></i> Lade...</li>';
+      channelsEl.innerHTML = '<li style="opacity:0.5; padding-left:0">&larr; Wähle eine Kategorie</li>';
+
+      if (hlsInstance) { try { hlsInstance.destroy(); } catch(_){} hlsInstance = null; }
+      try {
+        videoEl.pause();
+        videoEl.removeAttribute('src');
+        videoEl.load();
+      } catch(_) {}
+
+      appInitialized = false;
+      await initializeAppData();
+    }
+
+    openLoginBtn.addEventListener('click', () => {
+        populateServerSelect();
+        updateCurrentServerLabels();
+        renderServerTestResults(lastServerTest, false);
+        loginModal.classList.add('open');
+    });
+
+    const closeLogin = () => loginModal.classList.remove('open');
+    loginCancelBtn.addEventListener('click', closeLogin);
+    
+    // Außerhalb klicken schließt Modal
+    loginModal.addEventListener('click', (e) => {
+        if(e.target === loginModal) closeLogin();
+    });
+
+    loginTestServersBtn.addEventListener('click', () => {
+        runServerTest();
+    });
+
+    loginSaveBtn.addEventListener('click', async () => {
+        const selectedBaseUrl = normalizeServerUrl(loginServerSelect.value);
+
+        if(!selectedBaseUrl) {
+            alert("Bitte einen Server auswählen.");
+            return;
+        }
+
+        CONFIG.baseUrl = selectedBaseUrl;
+        localStorage.setItem('iptv_config', JSON.stringify({
+            baseUrl: CONFIG.baseUrl,
+            username: CONFIG.username,
+            password: CONFIG.password
+        }));
+
+        closeLogin();
+        updateCurrentServerLabels();
+        await refreshDataForServerChange();
+    });
+
+    updateCurrentServerLabels();
+
+    // ─── Theater / Windowed Fullscreen Logic ─────────────
+    function toggleTheaterMode(enabled) {
+      if (enabled) {
+        document.body.classList.add('theater-mode');
+      } else {
+        document.body.classList.remove('theater-mode');
+      }
+      theaterToggle.checked = enabled; // Sync checkbox state
+    }
+
+    theaterToggle.addEventListener('change', () => {
+      toggleTheaterMode(theaterToggle.checked);
+    });
+
+    exitTheaterBtn.addEventListener('click', () => {
+      toggleTheaterMode(false);
+    });
+
+    // ─── Anti-Lag Settings (persist) ─────────────────────
+    let antiLagEnabled    = JSON.parse(localStorage.getItem('antilagEnabled') || 'false');
+    let antiLagDelaySec   = parseInt(localStorage.getItem('antilagDelaySec') || antiLagDelay.value, 10);
+    antiLagToggle.checked = antiLagEnabled;
+    antiLagDelay.value    = antiLagDelaySec;
+
+    // UI Helper: Disable/Enable Delay Input based on Toggle
+    const updateDelayInputUI = () => {
+        const container = document.getElementById('antilag-input-container');
+        if(antiLagEnabled) {
+            container.style.opacity = '1';
+            container.style.pointerEvents = 'all';
+        } else {
+            container.style.opacity = '0.3';
+            container.style.pointerEvents = 'none';
+        }
+    };
+    updateDelayInputUI();
+
+    antiLagToggle.addEventListener('change', () => {
+      antiLagEnabled = antiLagToggle.checked;
+      localStorage.setItem('antilagEnabled', JSON.stringify(antiLagEnabled));
+      updateDelayInputUI();
+    });
+    antiLagDelay.addEventListener('change', () => {
+      let v = parseInt(antiLagDelay.value || '120', 10);
+      if (Number.isNaN(v)) v = 120;
+      v = Math.max(30, Math.min(600, v));
+      antiLagDelaySec = v;
+      antiLagDelay.value = v;
+      localStorage.setItem('antilagDelaySec', String(v));
+    });
+
+    // 🆕 Nur-Channels Modus (persist)
+    let nurChannels = JSON.parse(localStorage.getItem('nurChannels') || 'false');
+    nurChannelsToggle.checked = nurChannels;
+
+    function applyNurChannelsUI() {
+      if (nurChannels) {
+        // Kategorien dimmen/abschalten, lokale Suche verstecken, globale Suche zeigen
+        categoryCol.classList.add('dimmed');
+        catSearchEl.disabled = true;
+        chanSearchRow.hidden = true;
+        globalRow.hidden = false;
+        channelsEl.innerHTML = '<li style="justify-content:center; opacity:0.7"><i class="fas fa-search"></i> &nbsp;Suche oben eingeben</li>';
+      } else {
+        categoryCol.classList.remove('dimmed');
+        catSearchEl.disabled = false;
+        globalRow.hidden = true;
+        chanSearchRow.hidden = false;
+        // Normalmodus: Zustand von Kategorie berücksichtigen
+        chanSearchEl.placeholder = 'In Kategorie suchen...';
+        chanSearchEl.disabled = !currentCatId;
+        
+        if (currentCatId) {
+          if (channelsCache[currentCatId]) renderChannels(channelsCache[currentCatId]);
+          else loadChannels(currentCatId);
+        } else {
+          channelsEl.innerHTML = '<li style="opacity:0.5; padding-left:0">&larr; Wähle eine Kategorie</li>';
+        }
+      }
+    }
+
+    nurChannelsToggle.addEventListener('change', () => {
+      nurChannels = nurChannelsToggle.checked;
+      localStorage.setItem('nurChannels', JSON.stringify(nurChannels));
+      applyNurChannelsUI();
+    });
+
+    // ─── Initial Start ───────────────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+      viewerModal.classList.add('open');
+    });
+
+    // ─── Render Kategorien ────────────────────────────────
+    function renderCategories() {
+      categoryEl.innerHTML = '';
+      if (!filteredCats.length) { categoryEl.innerHTML = '<li>Keine Kategorien</li>'; return; }
+      filteredCats.forEach(cat => {
+        const li = document.createElement('li');
+        li.textContent    = cat.category_name;
+        li.dataset.catId = cat.category_id;
+        categoryEl.appendChild(li);
+      });
+    }
+
+    // ─── Kategorie-Suche ─────────────────────────────────
+    catSearchEl.addEventListener('input', () => {
+      const q = catSearchEl.value.trim().toLowerCase();
+      filteredCats = q ? categories.filter(c => c.category_name.toLowerCase().includes(q)) : categories.slice();
+      categoryEl.querySelectorAll('li').forEach(x=>x.classList.remove('active'));
+      currentCatId = null;
+      chanSearchEl.value = '';
+      chanSearchEl.disabled = true;
+      channelsEl.innerHTML = '<li style="opacity:0.5; padding-left:0">&larr; Wähle eine Kategorie</li>';
+      renderCategories();
+    });
+
+    // ─── Klick auf Kategorie (nur im Normalmodus relevant) ─────────
+    categoryEl.addEventListener('click', e => {
+      if (nurChannels) return; // Kategorien werden ignoriert
+      const li = e.target.closest('li'); if (!li) return;
+      const catId = li.dataset.catId; if (catId === currentCatId) return;
+      categoryEl.querySelectorAll('li').forEach(x=>x.classList.remove('active'));
+      li.classList.add('active');
+      currentCatId = catId;
+      chanSearchEl.value = '';
+      loadChannels(catId);
+    });
+
+    // ─── Channels laden & cachen ───────────────────────
+    async function fetchChannelsForCategory(catId) {
+      const data = await fetch(apiUrl('get_live_streams',{category_id:catId})).then(r=>r.json());
+      const list = data.map(ch => mapChannel(ch));
+      channelsCache[catId] = list;
+      return list;
+    }
+
+    async function fetchAllChannelsOnce() {
+      if (allChannelsCache) return allChannelsCache;
+      // Lädt alle Live-Channels einmalig (serverseitig gefiltert ist hier nicht möglich)
+      const data = await fetch(apiUrl('get_live_streams')).then(r=>r.json());
+      allChannelsCache = data.map(ch => mapChannel(ch));
+      return allChannelsCache;
+    }
+
+    function mapChannel(ch){
+      const base = CONFIG.baseUrl.replace(/\/$/, "");
+      let url = null;
+
+      if (ch.stream_id) {
+        url = `${base}/live/${CONFIG.username}/${CONFIG.password}/${ch.stream_id}.m3u8`;
+      } else if (ch.stream_url) {
+        url = ch.stream_url;
+      }
+
+      return { name: ch.name, url, category_id: ch.category_id };
+    }
+
+    async function loadChannels(catId) {
+      chanSearchEl.disabled = true;
+      channelsEl.innerHTML = '<li style="justify-content:center"><i class="fas fa-spinner fa-spin"></i> Lade Channels...</li>';
+      try {
+        const list = channelsCache[catId] || await fetchChannelsForCategory(catId);
+        renderChannels(list);
+        chanSearchEl.disabled = false;
+        chanSearchEl.focus(); // Auto Focus
+      } catch(err) {
+        console.error('Fehler beim Laden der Channels', err);
+        channelsEl.innerHTML = '<li>Fehler beim Laden</li>';
+      }
+    }
+
+    // ─── Render Channels ────────────────────────────────
+    function renderChannels(list) {
+      channelsEl.innerHTML = '';
+      if (!list.length) {
+        channelsEl.innerHTML = '<li>Keine Channels gefunden</li>';
+      } else {
+        list.forEach(ch => {
+          const li = document.createElement('li');
+          li.textContent = ch.name;
+          li.dataset.url = ch.url;
+          channelsEl.appendChild(li);
+        });
+      }
+    }
+
+    // ─── Kategoriegebundene Live-Suche (Normalmodus) ────
+    chanSearchEl.addEventListener('input', () => {
+      if (nurChannels) return; // im Nur-Channels-Modus aus
+      const q    = chanSearchEl.value.trim().toLowerCase();
+      const all = channelsCache[currentCatId] || [];
+      const filtered = q ? all.filter(ch => ch.name.toLowerCase().includes(q)) : all;
+      renderChannels(filtered);
+    });
+
+    // 🆕 Globale Channelsuche (Nur-Channels-Modus)
+    globalBtn.addEventListener('click', runGlobalSearch);
+    globalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runGlobalSearch(); } });
+
+    async function runGlobalSearch(){
+      if (!nurChannels) return;
+      const q = globalInput.value.trim().toLowerCase();
+      if (!q) { channelsEl.innerHTML = '<li>Bitte Suchbegriff eingeben</li>'; return; }
+      channelsEl.innerHTML = '<li><i class="fas fa-spinner fa-spin"></i> Durchsuche Datenbank...</li>';
+      try {
+        const all = await fetchAllChannelsOnce();
+        const filtered = all.filter(ch => ch.name.toLowerCase().includes(q));
+        if (!filtered.length) channelsEl.innerHTML = '<li>Keine Treffer</li>';
+        else renderChannels(filtered);
+      } catch (err) {
+        console.error('Globale Suche fehlgeschlagen', err);
+        channelsEl.innerHTML = '<li>Fehler bei der Suche</li>';
+      }
+    }
+
+    // ─── Klick auf Channel → Playback ────────────────────
+    channelsEl.addEventListener('click', e => {
+      const li = e.target.closest('li');
+      if (!li || !li.dataset.url) return;
+      channelsEl.querySelectorAll('li').forEach(x=>x.classList.remove('active'));
+      li.classList.add('active');
+      retryCount = 0;
+      playStream(li.dataset.url);
+      
+      // Bei Mobile/Tablet: Sidebar schließen, wenn Channel gewählt
+      if(window.innerWidth < 800) {
+          toggleTheaterMode(true);
+      }
+    });
+
+    // ─── Stall-Handling ──────────────────────────────────
+    const handleStall = () => {
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        if (retryCount < MAX_RETRIES && videoEl.readyState < 3 && currentStreamUrl) {
+          console.log('Stream hängt - öffne Channel neu...', retryCount + 1);
+          retryCount++;
+          playStream(currentStreamUrl);
+        }
+      }, 5000);
+    };
+    const handlePlaying = () => { if (stallTimer) clearTimeout(stallTimer); retryCount = 0; };
+
+    // ─── Hilfsfunktionen für Anti-Lag ────────────────────
+    function getBufferedAhead() {
+      try {
+        const t = videoEl.currentTime;
+        for (let i = 0; i < videoEl.buffered.length; i++) {
+          const start = videoEl.buffered.start(i);
+          const end   = videoEl.buffered.end(i);
+          if (t >= start && t <= end) return end - t;
+        }
+      } catch(_) {}
+      return 0;
+    }
+
+    function showPrebufferProgress(target) {
+      const ahead = Math.floor(getBufferedAhead());
+      // Update Text mit Icon
+      lagIndicator.innerHTML = `<i class="fas fa-cog fa-spin"></i> Prebuffering ${ahead}s / ${target}s …`;
+      lagIndicator.hidden = false;
+    }
+
+    function hidePrebuffer() {
+      lagIndicator.hidden = true;
+    }
+
+
+    function waitForPrebuffer(targetSec, abortSignal) {
+      return new Promise((resolve, reject) => {
+        const tick = () => {
+          if (abortSignal.aborted) return reject(new Error('aborted'));
+          const ahead = getBufferedAhead();
+          showPrebufferProgress(targetSec);
+          if (ahead >= targetSec) {
+            hidePrebuffer();
+            return resolve();
+          }
+          prebufTimer = setTimeout(tick, 300);
+        };
+        let prebufTimer = setTimeout(tick, 300);
+        abortSignal.addEventListener('abort', () => {
+          clearTimeout(prebufTimer);
+          hidePrebuffer();
+          reject(new Error('aborted'));
+        }, { once:true });
+      });
+    }
+
+    // ─── Play-Funktion (mit Anti-Lag) ────────────────────
+    let playAbort = null;
+    async function playStream(src) {
+      if (!src) return alert('⚠️ Ungültige URL');
+
+      // Abbrechen von laufenden Prebuffer-Vorgängen
+      if (playAbort) playAbort.abort();
+      playAbort = new AbortController();
+
+      currentStreamUrl = src;
+
+      // Event-Listener entfernen
+      videoEl.removeEventListener('stalled', handleStall);
+      videoEl.removeEventListener('waiting', handleStall);
+      videoEl.removeEventListener('playing', handlePlaying);
+
+      // HLS Instanz aufräumen
+      if (hlsInstance) { try { hlsInstance.destroy(); } catch(_){} hlsInstance = null; }
+      videoEl.src = '';
+
+      const hlsCfgBase = {
+        enableWorker: true,
+        // Standard-Puffer
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        backBufferLength: 120
+      };
+      const hlsCfgAnti = {
+        enableWorker: true,
+        // Großzügig puffern: Verzögerung + Reserve
+        maxBufferLength: Math.max(60, antiLagDelaySec + 30),
+        maxMaxBufferLength: Math.max(120, antiLagDelaySec + 120),
+        backBufferLength: Math.max(180, antiLagDelaySec + 60),
+        // Für Live-Streams kein Low-Latency erzwingen:
+        lowLatencyMode: false
+      };
+
+      const useAnti = antiLagEnabled && antiLagDelaySec >= 30;
+
+      // ── HLS.js Pfad
+      if (window.Hls && Hls.isSupported()) {
+        hlsInstance = new Hls(useAnti ? hlsCfgAnti : hlsCfgBase);
+        hlsInstance.loadSource(src);
+        hlsInstance.attachMedia(videoEl);
+
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, async () => {
+          try {
+            if (useAnti) {
+              // Preload + Prebuffer
+              videoEl.pause();
+              showPrebufferProgress(antiLagDelaySec);
+              await waitForPrebuffer(antiLagDelaySec, playAbort.signal);
+            }
+            await videoEl.play();
+          } catch (err) {
+            console.error('Start fehlgeschlagen', err);
+          }
+        });
+
+        // während Prebuffering weiterladen lassen
+        hlsInstance.on(Hls.Events.ERROR, (_e, data) => {
+          console.error('HLS.js error', data);
+          if (data.fatal) {
+            switch(data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                if (retryCount < MAX_RETRIES) {
+                  console.log('Netzwerkfehler - öffne Channel neu...');
+                  retryCount++;
+                  setTimeout(() => playStream(src), 2000);
+                }
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                try { hlsInstance.recoverMediaError(); } catch(_){ }
+                break;
+            }
+          }
+        });
+
+      // ── Native HLS (Safari)
+      } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+        videoEl.src = src;
+        const startNative = async () => {
+          try {
+            if (useAnti) {
+              videoEl.preload = 'auto';
+              videoEl.pause();
+              showPrebufferProgress(antiLagDelaySec);
+              await waitForPrebuffer(antiLagDelaySec, playAbort.signal);
+            }
+            await videoEl.play();
+          } catch (err) {
+            console.error('Native Start fehlgeschlagen', err);
+          }
+        };
+        videoEl.addEventListener('loadedmetadata', () => startNative(), { once:true });
+      } else {
+        alert('⚠️ HLS wird nicht unterstützt.');
+        return;
+      }
+
+      // Auto-Reload Listener
+      videoEl.addEventListener('stalled', handleStall);
+      videoEl.addEventListener('waiting', handleStall);
+      videoEl.addEventListener('playing', handlePlaying);
+    }
+  })();
+  </script>
+</body>
+</html>
